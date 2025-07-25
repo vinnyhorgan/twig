@@ -21,7 +21,62 @@ typedef struct {
   SDL_Window* window;
   SDL_Renderer* renderer;
   SDL_Texture* texture;
+  bool fullscreen;
+  double current_time;
+  double prev_time;
+  lua_State* L;
 } State;
+
+static int l_surface_new(lua_State* L) {
+  State* state = *((State**)lua_getextraspace(L));
+
+  int width = (int)luaL_checkinteger(L, 1);
+  int height = (int)luaL_checkinteger(L, 2);
+
+  SDL_Surface* surface = SDL_CreateSurface(width, height, state->texture->format);
+  if (!surface) {
+    return luaL_error(L, "failed to create surface: %s", SDL_GetError());
+  }
+
+  SDL_Surface** ud = (SDL_Surface**)lua_newuserdata(L, sizeof(SDL_Surface*));
+  *ud = surface;
+
+  luaL_getmetatable(L, "surface");
+  lua_setmetatable(L, -2);
+
+  return 1;
+}
+
+static const luaL_Reg surface_funcs[] = {
+  { "new", l_surface_new },
+  { NULL, NULL },
+};
+
+static int l_get_clipboard(lua_State* L) {
+  char* text = SDL_GetClipboardText();
+  if (!text)
+    return 0;
+  lua_pushstring(L, text);
+  SDL_free(text);
+  return 1;
+}
+
+static const luaL_Reg twig_funcs[] = {
+  { "get_clipboard", l_get_clipboard },
+  { NULL, NULL },
+};
+
+int luaopen_twig(lua_State* L) {
+  luaL_newlib(L, twig_funcs);
+
+  luaL_newmetatable(L, "surface");
+  luaL_setfuncs(L, surface_funcs, 0);
+  lua_pushvalue(L, -1);
+  lua_setfield(L, -2, "__index");
+
+  lua_setfield(L, -2, "surface");
+  return 1;
+}
 
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
   SDL_SetAppMetadata("twig", "0.1", "com.vinnyhorgan.twig");
@@ -50,6 +105,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     return SDL_APP_FAILURE;
   }
 
+  SDL_SetWindowMinimumSize(state->window, WIDTH, HEIGHT);
   SDL_SetRenderVSync(state->renderer, 1);
   SDL_SetRenderLogicalPresentation(state->renderer, WIDTH, HEIGHT, SDL_LOGICAL_PRESENTATION_INTEGER_SCALE);
 
@@ -67,34 +123,49 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
   SDL_DestroyProperties(props);
   SDL_SetTextureScaleMode(state->texture, SDL_SCALEMODE_NEAREST);
 
-  SDL_Log("%s", SDL_GetPixelFormatName(state->texture->format));
-
-  lua_State* L = luaL_newstate();
-  luaL_openlibs(L);
-  luaL_loadstring(L, "print('hello!')");
-  if (lua_pcall(L, 0, LUA_MULTRET, 0) != LUA_OK) {
-    SDL_Log("lua error: %s", lua_tostring(L, -1));
-    lua_close(L);
+  state->L = luaL_newstate();
+  if (!state->L) {
+    SDL_Log("failed to create lua state: %s", SDL_GetError());
     return SDL_APP_FAILURE;
   }
 
-  const char* input = "miniz!";
-  char compressed[100], decompressed[100];
-  mz_ulong comp_len = sizeof(compressed);
-  compress((unsigned char*)compressed, &comp_len, (const unsigned char*)input, strlen(input));
+  *((State**)lua_getextraspace(state->L)) = state;
+
+  luaL_openlibs(state->L);
+  luaL_requiref(state->L, "twig", luaopen_twig, 1);
+
+  char path[256];
+  SDL_snprintf(path, sizeof(path), "%sdata/main.lua", SDL_GetBasePath());
+
+  if (luaL_dofile(state->L, path) != LUA_OK) {
+    SDL_Log("failed to run main.lua: %s", lua_tostring(state->L, -1));
+    return SDL_APP_FAILURE;
+  }
 
   return SDL_APP_CONTINUE;
 }
 
 SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
+  State* state = (State*)appstate;
+
   if (event->type == SDL_EVENT_QUIT) {
     return SDL_APP_SUCCESS;
+  } else if (event->type == SDL_EVENT_KEY_DOWN) {
+    if (event->key.key == SDLK_RETURN && event->key.mod & SDL_KMOD_ALT) {
+      state->fullscreen = !state->fullscreen;
+      SDL_SetWindowFullscreen(state->window, state->fullscreen);
+    }
   }
+
   return SDL_APP_CONTINUE;
 }
 
 SDL_AppResult SDL_AppIterate(void* appstate) {
   State* state = (State*)appstate;
+
+  state->prev_time = state->current_time;
+  state->current_time = SDL_GetPerformanceCounter() / (double)SDL_GetPerformanceFrequency();
+  double delta_time = state->current_time - state->prev_time;
 
   const double now = ((double)SDL_GetTicks()) / 1000.0;
   const float red = (float)(0.5 + 0.5 * SDL_sin(now));
@@ -123,6 +194,7 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
 void SDL_AppQuit(void* appstate, SDL_AppResult result) {
   if (appstate) {
     State* state = (State*)appstate;
+    lua_close(state->L);
     SDL_DestroyTexture(state->texture);
     SDL_DestroyRenderer(state->renderer);
     SDL_DestroyWindow(state->window);
