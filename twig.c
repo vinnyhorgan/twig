@@ -25,7 +25,30 @@ typedef struct {
   double current_time;
   double prev_time;
   lua_State* L;
+  int update_ref;
+  int draw_ref;
 } State;
+
+typedef struct {
+  SDL_Surface* s;
+  bool owned;
+} Surface;
+
+static void push_locked_surface(lua_State* L, SDL_Surface* s) {
+  Surface* ud = (Surface*)lua_newuserdata(L, sizeof(Surface));
+  ud->s = s;
+  ud->owned = false;  // not owned by Lua, will not free
+  luaL_getmetatable(L, "surface");
+  lua_setmetatable(L, -2);
+}
+
+static int l_surface_gc(lua_State* L) {
+  Surface* ud = (Surface*)luaL_checkudata(L, 1, "surface");
+  if (ud->owned && ud->s) {
+    SDL_DestroySurface(ud->s);
+  }
+  return 0;
+}
 
 static int l_surface_new(lua_State* L) {
   State* state = *((State**)lua_getextraspace(L));
@@ -38,8 +61,9 @@ static int l_surface_new(lua_State* L) {
     return luaL_error(L, "failed to create surface: %s", SDL_GetError());
   }
 
-  SDL_Surface** ud = (SDL_Surface**)lua_newuserdata(L, sizeof(SDL_Surface*));
-  *ud = surface;
+  Surface* ud = (Surface*)lua_newuserdata(L, sizeof(Surface));
+  ud->s = surface;
+  ud->owned = true;
 
   luaL_getmetatable(L, "surface");
   lua_setmetatable(L, -2);
@@ -47,8 +71,23 @@ static int l_surface_new(lua_State* L) {
   return 1;
 }
 
+static int l_surface_clear(lua_State* L) {
+  Surface* ud = (Surface*)luaL_checkudata(L, 1, "surface");
+  if (!ud->s) {
+    return luaL_error(L, "invalid surface");
+  }
+  Uint8 r = (Uint8)luaL_checkinteger(L, 2);
+  Uint8 g = (Uint8)luaL_checkinteger(L, 3);
+  Uint8 b = (Uint8)luaL_checkinteger(L, 4);
+  Uint8 a = (Uint8)luaL_optinteger(L, 5, SDL_ALPHA_OPAQUE);
+  SDL_ClearSurface(ud->s, (float)r / 255.0f, (float)g / 255.0f, (float)b / 255.0f, (float)a / 255.0f);
+  return 0;
+}
+
 static const luaL_Reg surface_funcs[] = {
+  { "__gc", l_surface_gc },
   { "new", l_surface_new },
+  { "clear", l_surface_clear },
   { NULL, NULL },
 };
 
@@ -142,6 +181,15 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     return SDL_APP_FAILURE;
   }
 
+  lua_getglobal(state->L, "twig");
+  lua_getfield(state->L, -1, "update");
+  state->update_ref = lua_isfunction(state->L, -1) ? luaL_ref(state->L, LUA_REGISTRYINDEX) : LUA_NOREF;
+  lua_getfield(state->L, -1, "draw");
+  state->draw_ref = lua_isfunction(state->L, -1) ? luaL_ref(state->L, LUA_REGISTRYINDEX) : LUA_NOREF;
+  lua_pop(state->L, 1);  // pop twig table
+
+  state->current_time = SDL_GetPerformanceCounter() / (double)SDL_GetPerformanceFrequency();
+
   return SDL_APP_CONTINUE;
 }
 
@@ -167,6 +215,15 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
   state->current_time = SDL_GetPerformanceCounter() / (double)SDL_GetPerformanceFrequency();
   double delta_time = state->current_time - state->prev_time;
 
+  if (state->update_ref != LUA_NOREF) {
+    lua_rawgeti(state->L, LUA_REGISTRYINDEX, state->update_ref);
+    lua_pushnumber(state->L, delta_time);
+    if (lua_pcall(state->L, 1, 0, 0) != LUA_OK) {
+      SDL_Log("failed to call update function: %s", lua_tostring(state->L, -1));
+      return SDL_APP_FAILURE;
+    }
+  }
+
   const double now = ((double)SDL_GetTicks()) / 1000.0;
   const float red = (float)(0.5 + 0.5 * SDL_sin(now));
   const float green = (float)(0.5 + 0.5 * SDL_sin(now + SDL_PI_D * 2 / 3));
@@ -178,9 +235,16 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
     return SDL_APP_FAILURE;
   }
 
-  SDL_ClearSurface(s, 1, 0, 0, 1);
-  SDL_Rect rect = { 10, 10, 50, 50 };
-  SDL_FillSurfaceRect(s, &rect, SDL_MapRGB(SDL_GetPixelFormatDetails(s->format), NULL, 255, 255, 0));
+  if (state->draw_ref != LUA_NOREF) {
+    lua_rawgeti(state->L, LUA_REGISTRYINDEX, state->draw_ref);
+    push_locked_surface(state->L, s);
+    if (lua_pcall(state->L, 1, 0, 0) != LUA_OK) {
+      SDL_Log("failed to call draw function: %s", lua_tostring(state->L, -1));
+      SDL_UnlockTexture(state->texture);
+      return SDL_APP_FAILURE;
+    }
+  }
+
   SDL_UnlockTexture(state->texture);
 
   SDL_SetRenderDrawColorFloat(state->renderer, red, green, blue, SDL_ALPHA_OPAQUE_FLOAT); /* new color, full alpha. */
