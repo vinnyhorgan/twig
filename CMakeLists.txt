@@ -92,12 +92,23 @@ add_executable(twig WIN32 ${SOURCES})
 target_include_directories(twig PRIVATE ${lua_SOURCE_DIR} ${stb_SOURCE_DIR} ${miniz_SOURCE_DIR})
 target_link_libraries(twig PRIVATE SDL3::SDL3)
 
+add_custom_command(TARGET twig
+  POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${CMAKE_SOURCE_DIR}/data
+    $<TARGET_FILE_DIR:twig>/data
+  COMMENT "copying data directory to output"
+)
+
 find_program(UPX upx)
 if(UPX)
   message(STATUS "upx found")
   add_custom_command(TARGET twig
     POST_BUILD
-    COMMAND ${UPX} --best $<TARGET_FILE:twig>
+    COMMAND
+      $<$<CONFIG:Release>:${UPX}>
+      $<$<CONFIG:Release>:--best>
+      $<$<CONFIG:Release>:$<TARGET_FILE:twig>>
     COMMENT "compressing executable"
   )
 else()
