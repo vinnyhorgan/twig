@@ -51,12 +51,10 @@ static int l_surface_gc(lua_State* L) {
 }
 
 static int l_surface_new(lua_State* L) {
-  State* state = *((State**)lua_getextraspace(L));
-
   int width = (int)luaL_checkinteger(L, 1);
   int height = (int)luaL_checkinteger(L, 2);
 
-  SDL_Surface* surface = SDL_CreateSurface(width, height, state->texture->format);
+  SDL_Surface* surface = SDL_CreateSurface(width, height, SDL_PIXELFORMAT_RGBA8888);
   if (!surface) {
     return luaL_error(L, "failed to create surface: %s", SDL_GetError());
   }
@@ -72,8 +70,6 @@ static int l_surface_new(lua_State* L) {
 }
 
 static int l_surface_load(lua_State* L) {
-  State* state = *((State**)lua_getextraspace(L));
-
   const char* path = luaL_checkstring(L, 1);
 
   int width, height;
@@ -92,7 +88,7 @@ static int l_surface_load(lua_State* L) {
   SDL_memcpy(surface->pixels, data, width * height * 4);
   stbi_image_free(data);
 
-  SDL_Surface* converted = SDL_ConvertSurface(surface, state->texture->format);
+  SDL_Surface* converted = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA8888);
   SDL_DestroySurface(surface);
 
   Surface* ud = (Surface*)lua_newuserdata(L, sizeof(Surface));
@@ -313,22 +309,13 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
   SDL_SetRenderVSync(state->renderer, 1);
   SDL_SetRenderLogicalPresentation(state->renderer, WIDTH, HEIGHT, SDL_LOGICAL_PRESENTATION_INTEGER_SCALE);
 
-  SDL_PropertiesID props = SDL_CreateProperties();
-  SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_CREATE_ACCESS_NUMBER, SDL_TEXTUREACCESS_STREAMING);
-  SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_CREATE_WIDTH_NUMBER, WIDTH);
-  SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_CREATE_HEIGHT_NUMBER, HEIGHT);
-
-#ifdef __EMSCRIPTEN__
-  SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_CREATE_FORMAT_NUMBER, SDL_PIXELFORMAT_RGBA8888);
-#endif
-
-  state->texture = SDL_CreateTextureWithProperties(state->renderer, props);
+  state->texture =
+      SDL_CreateTexture(state->renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, WIDTH, HEIGHT);
   if (!state->texture) {
     SDL_Log("failed to create texture: %s", SDL_GetError());
     return SDL_APP_FAILURE;
   }
 
-  SDL_DestroyProperties(props);
   SDL_SetTextureScaleMode(state->texture, SDL_SCALEMODE_NEAREST);
 
   state->L = luaL_newstate();
