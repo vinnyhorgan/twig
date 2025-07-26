@@ -88,9 +88,18 @@ set(SOURCES
   res.rc
 )
 
+if(EMSCRIPTEN)
+  set(CMAKE_EXECUTABLE_SUFFIX ".html" CACHE INTERNAL "")
+endif()
+
 add_executable(twig WIN32 ${SOURCES})
 target_include_directories(twig PRIVATE ${lua_SOURCE_DIR} ${stb_SOURCE_DIR} ${miniz_SOURCE_DIR})
 target_link_libraries(twig PRIVATE SDL3::SDL3)
+
+
+if(EMSCRIPTEN)
+  target_link_libraries(twig PRIVATE "--embed-file \"${CMAKE_SOURCE_DIR}/data@/data\"")
+endif()
 
 add_custom_command(TARGET twig
   POST_BUILD
@@ -99,18 +108,3 @@ add_custom_command(TARGET twig
     $<TARGET_FILE_DIR:twig>/data
   COMMENT "copying data directory to output"
 )
-
-find_program(UPX upx)
-if(UPX)
-  message(STATUS "upx found")
-  add_custom_command(TARGET twig
-    POST_BUILD
-    COMMAND
-      $<$<CONFIG:Release>:${UPX}>
-      $<$<CONFIG:Release>:--best>
-      $<$<CONFIG:Release>:$<TARGET_FILE:twig>>
-    COMMENT "compressing executable"
-  )
-else()
-  message(STATUS "upx not found")
-endif()

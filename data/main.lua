@@ -9,7 +9,7 @@ for i = 9, s:get_width() - 10 do
   end
 end
 
-local rogue = twig.surface.load("rogue.png")
+local rogue = twig.surface.load("data/bit.png")
 
 function twig.update(dt)
 
