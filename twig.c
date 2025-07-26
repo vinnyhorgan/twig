@@ -208,7 +208,7 @@ static int l_surface_rect(lua_State* L) {
 
   SDL_Rect rect = { x, y, w, h };
   SDL_FillSurfaceRect(ud->s, &rect, SDL_MapRGBA(SDL_GetPixelFormatDetails(ud->s->format), NULL, r, g, b, a));
-  return 1;
+  return 0;
 }
 
 static int l_surface_blit(lua_State* L) {
@@ -317,6 +317,10 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
   SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_CREATE_ACCESS_NUMBER, SDL_TEXTUREACCESS_STREAMING);
   SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_CREATE_WIDTH_NUMBER, WIDTH);
   SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_CREATE_HEIGHT_NUMBER, HEIGHT);
+
+#ifdef __EMSCRIPTEN__
+  SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_CREATE_FORMAT_NUMBER, SDL_PIXELFORMAT_RGBA8888);
+#endif
 
   state->texture = SDL_CreateTextureWithProperties(state->renderer, props);
   if (!state->texture) {
