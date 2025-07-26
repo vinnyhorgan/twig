@@ -71,6 +71,113 @@ static int l_surface_new(lua_State* L) {
   return 1;
 }
 
+static int l_surface_load(lua_State* L) {
+  State* state = *((State**)lua_getextraspace(L));
+
+  const char* path = luaL_checkstring(L, 1);
+
+  int width, height;
+  unsigned char* data = stbi_load(path, &width, &height, NULL, 4);
+
+  if (!data) {
+    return luaL_error(L, "failed to load image: %s", stbi_failure_reason());
+  }
+
+  SDL_Surface* surface = SDL_CreateSurface(width, height, SDL_PIXELFORMAT_ABGR8888);
+  if (!surface) {
+    stbi_image_free(data);
+    return luaL_error(L, "failed to create surface: %s", SDL_GetError());
+  }
+
+  SDL_memcpy(surface->pixels, data, width * height * 4);
+  stbi_image_free(data);
+
+  SDL_Surface* converted = SDL_ConvertSurface(surface, state->texture->format);
+  SDL_DestroySurface(surface);
+
+  Surface* ud = (Surface*)lua_newuserdata(L, sizeof(Surface));
+  ud->s = converted;
+  ud->owned = true;
+
+  luaL_getmetatable(L, "surface");
+  lua_setmetatable(L, -2);
+
+  return 1;
+}
+
+static int l_surface_get_width(lua_State* L) {
+  Surface* ud = (Surface*)luaL_checkudata(L, 1, "surface");
+  if (!ud->s) {
+    return luaL_error(L, "invalid surface");
+  }
+  lua_pushinteger(L, ud->s->w);
+  return 1;
+}
+
+static int l_surface_get_height(lua_State* L) {
+  Surface* ud = (Surface*)luaL_checkudata(L, 1, "surface");
+  if (!ud->s) {
+    return luaL_error(L, "invalid surface");
+  }
+  lua_pushinteger(L, ud->s->h);
+  return 1;
+}
+
+static int l_surface_clip(lua_State* L) {
+  Surface* ud = (Surface*)luaL_checkudata(L, 1, "surface");
+  if (!ud->s) {
+    return luaL_error(L, "invalid surface");
+  }
+
+  int x = (int)luaL_checkinteger(L, 2);
+  int y = (int)luaL_checkinteger(L, 3);
+  int w = (int)luaL_checkinteger(L, 4);
+  int h = (int)luaL_checkinteger(L, 5);
+
+  SDL_Rect rect = { x, y, w, h };
+  SDL_SetSurfaceClipRect(ud->s, &rect);
+  return 0;
+}
+
+static int l_surface_set(lua_State* L) {
+  Surface* ud = (Surface*)luaL_checkudata(L, 1, "surface");
+  if (!ud->s) {
+    return luaL_error(L, "invalid surface");
+  }
+
+  int x = (int)luaL_checkinteger(L, 2);
+  int y = (int)luaL_checkinteger(L, 3);
+
+  Uint8 r = (Uint8)luaL_checkinteger(L, 4);
+  Uint8 g = (Uint8)luaL_checkinteger(L, 5);
+  Uint8 b = (Uint8)luaL_checkinteger(L, 6);
+  Uint8 a = (Uint8)luaL_optinteger(L, 7, SDL_ALPHA_OPAQUE);
+
+  SDL_WriteSurfacePixel(ud->s, x, y, r, g, b, a);
+  return 0;
+}
+
+static int l_surface_get(lua_State* L) {
+  Surface* ud = (Surface*)luaL_checkudata(L, 1, "surface");
+  if (!ud->s) {
+    return luaL_error(L, "invalid surface");
+  }
+
+  int x = (int)luaL_checkinteger(L, 2);
+  int y = (int)luaL_checkinteger(L, 3);
+
+  Uint8 r, g, b, a;
+  if (!SDL_ReadSurfacePixel(ud->s, x, y, &r, &g, &b, &a)) {
+    return luaL_error(L, "failed to read pixel: %s", SDL_GetError());
+  }
+
+  lua_pushinteger(L, r);
+  lua_pushinteger(L, g);
+  lua_pushinteger(L, b);
+  lua_pushinteger(L, a);
+  return 4;
+}
+
 static int l_surface_clear(lua_State* L) {
   Surface* ud = (Surface*)luaL_checkudata(L, 1, "surface");
   if (!ud->s) {
@@ -84,10 +191,58 @@ static int l_surface_clear(lua_State* L) {
   return 0;
 }
 
+static int l_surface_rect(lua_State* L) {
+  Surface* ud = (Surface*)luaL_checkudata(L, 1, "surface");
+  if (!ud->s) {
+    return luaL_error(L, "invalid surface");
+  }
+
+  int x = (int)luaL_checkinteger(L, 2);
+  int y = (int)luaL_checkinteger(L, 3);
+  int w = (int)luaL_checkinteger(L, 4);
+  int h = (int)luaL_checkinteger(L, 5);
+  Uint8 r = (Uint8)luaL_checkinteger(L, 6);
+  Uint8 g = (Uint8)luaL_checkinteger(L, 7);
+  Uint8 b = (Uint8)luaL_checkinteger(L, 8);
+  Uint8 a = (Uint8)luaL_optinteger(L, 9, SDL_ALPHA_OPAQUE);
+
+  SDL_Rect rect = { x, y, w, h };
+  SDL_FillSurfaceRect(ud->s, &rect, SDL_MapRGBA(SDL_GetPixelFormatDetails(ud->s->format), NULL, r, g, b, a));
+  return 1;
+}
+
+static int l_surface_blit(lua_State* L) {
+  Surface* dst = (Surface*)luaL_checkudata(L, 1, "surface");
+  Surface* src = (Surface*)luaL_checkudata(L, 2, "surface");
+  if (!dst->s || !src->s) {
+    return luaL_error(L, "invalid surface");
+  }
+
+  int dst_x = (int)luaL_checkinteger(L, 3);
+  int dst_y = (int)luaL_checkinteger(L, 4);
+  int src_x = (int)luaL_optinteger(L, 5, 0);
+  int src_y = (int)luaL_optinteger(L, 6, 0);
+  int src_w = (int)luaL_optinteger(L, 7, src->s->w);
+  int src_h = (int)luaL_optinteger(L, 8, src->s->h);
+
+  SDL_Rect dst_rect = { dst_x, dst_y, src_w, src_h };
+  SDL_Rect src_rect = { src_x, src_y, src_w, src_h };
+  SDL_BlitSurface(src->s, &src_rect, dst->s, &dst_rect);
+  return 0;
+}
+
 static const luaL_Reg surface_funcs[] = {
   { "__gc", l_surface_gc },
   { "new", l_surface_new },
+  { "load", l_surface_load },
+  { "get_width", l_surface_get_width },
+  { "get_height", l_surface_get_height },
+  { "clip", l_surface_clip },
+  { "set", l_surface_set },
+  { "get", l_surface_get },
   { "clear", l_surface_clear },
+  { "rect", l_surface_rect },
+  { "blit", l_surface_blit },
   { NULL, NULL },
 };
 
@@ -100,8 +255,18 @@ static int l_get_clipboard(lua_State* L) {
   return 1;
 }
 
+static int l_set_border_color(lua_State* L) {
+  State* state = *((State**)lua_getextraspace(L));
+  Uint8 r = (Uint8)luaL_checkinteger(L, 1);
+  Uint8 g = (Uint8)luaL_checkinteger(L, 2);
+  Uint8 b = (Uint8)luaL_checkinteger(L, 3);
+  SDL_SetRenderDrawColor(state->renderer, r, g, b, SDL_ALPHA_OPAQUE);
+  return 0;
+}
+
 static const luaL_Reg twig_funcs[] = {
   { "get_clipboard", l_get_clipboard },
+  { "set_border_color", l_set_border_color },
   { NULL, NULL },
 };
 
@@ -224,11 +389,6 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
     }
   }
 
-  const double now = ((double)SDL_GetTicks()) / 1000.0;
-  const float red = (float)(0.5 + 0.5 * SDL_sin(now));
-  const float green = (float)(0.5 + 0.5 * SDL_sin(now + SDL_PI_D * 2 / 3));
-  const float blue = (float)(0.5 + 0.5 * SDL_sin(now + SDL_PI_D * 4 / 3));
-
   SDL_Surface* s = NULL;
   if (!SDL_LockTextureToSurface(state->texture, NULL, &s)) {
     SDL_Log("failed to lock texture: %s", SDL_GetError());
@@ -247,7 +407,6 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
 
   SDL_UnlockTexture(state->texture);
 
-  SDL_SetRenderDrawColorFloat(state->renderer, red, green, blue, SDL_ALPHA_OPAQUE_FLOAT); /* new color, full alpha. */
   SDL_RenderClear(state->renderer);
   SDL_RenderTexture(state->renderer, state->texture, NULL, NULL);
   SDL_RenderPresent(state->renderer);
