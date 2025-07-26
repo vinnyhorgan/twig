@@ -27,6 +27,7 @@ typedef struct {
   lua_State* L;
   int update_ref;
   int draw_ref;
+  int event_ref;
 } State;
 
 typedef struct {
@@ -174,6 +175,20 @@ static int l_surface_get(lua_State* L) {
   return 4;
 }
 
+static int l_surface_set_color_mod(lua_State* L) {
+  Surface* ud = (Surface*)luaL_checkudata(L, 1, "surface");
+  if (!ud->s) {
+    return luaL_error(L, "invalid surface");
+  }
+
+  Uint8 r = (Uint8)luaL_checkinteger(L, 2);
+  Uint8 g = (Uint8)luaL_checkinteger(L, 3);
+  Uint8 b = (Uint8)luaL_checkinteger(L, 4);
+
+  SDL_SetSurfaceColorMod(ud->s, r, g, b);
+  return 0;
+}
+
 static int l_surface_clear(lua_State* L) {
   Surface* ud = (Surface*)luaL_checkudata(L, 1, "surface");
   if (!ud->s) {
@@ -236,6 +251,7 @@ static const luaL_Reg surface_funcs[] = {
   { "clip", l_surface_clip },
   { "set", l_surface_set },
   { "get", l_surface_get },
+  { "set_color_mod", l_surface_set_color_mod },
   { "clear", l_surface_clear },
   { "rect", l_surface_rect },
   { "blit", l_surface_blit },
@@ -342,6 +358,8 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
   state->update_ref = lua_isfunction(state->L, -1) ? luaL_ref(state->L, LUA_REGISTRYINDEX) : LUA_NOREF;
   lua_getfield(state->L, -1, "draw");
   state->draw_ref = lua_isfunction(state->L, -1) ? luaL_ref(state->L, LUA_REGISTRYINDEX) : LUA_NOREF;
+  lua_getfield(state->L, -1, "event");
+  state->event_ref = lua_isfunction(state->L, -1) ? luaL_ref(state->L, LUA_REGISTRYINDEX) : LUA_NOREF;
   lua_pop(state->L, 1);  // pop twig table
 
   state->current_time = SDL_GetPerformanceCounter() / (double)SDL_GetPerformanceFrequency();
@@ -358,6 +376,32 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
     if (event->key.key == SDLK_RETURN && event->key.mod & SDL_KMOD_ALT) {
       state->fullscreen = !state->fullscreen;
       SDL_SetWindowFullscreen(state->window, state->fullscreen);
+    }
+  }
+
+  if (state->event_ref != LUA_NOREF) {
+    lua_rawgeti(state->L, LUA_REGISTRYINDEX, state->event_ref);
+
+    int args = 0;
+
+    switch (event->type) {
+      case SDL_EVENT_KEY_DOWN:
+        lua_pushstring(state->L, "key_down");
+        lua_pushinteger(state->L, event->key.key);
+        args = 2;
+        break;
+      case SDL_EVENT_KEY_UP:
+        lua_pushstring(state->L, "key_up");
+        lua_pushinteger(state->L, event->key.key);
+        args = 2;
+        break;
+      default:
+        return SDL_APP_CONTINUE;
+    }
+
+    if (lua_pcall(state->L, args, 0, 0) != LUA_OK) {
+      SDL_Log("failed to call event function: %s", lua_tostring(state->L, -1));
+      return SDL_APP_FAILURE;
     }
   }
 
