@@ -91,10 +91,6 @@ for i = 0, total - 1 do
   end
 end
 
-for _, g in pairs(glyphs) do
-  print(g.x, g.y, g.w, g.h)
-end
-
 local function draw_text(s, x, y, text)
   local startx = x
   for _, cp in utf8.codes(text) do
@@ -103,19 +99,14 @@ local function draw_text(s, x, y, text)
       y = y + height
     elseif cp ~= 13 then
       local g = glyphs[cp] or glyphs[63]
-      font:set_color_mod(255, 0, 0)
       s:blit(font, x, y, g.x, g.y, g.w, g.h)
       x = x + g.w
     end
   end
 end
 
-function twig.event(type, a, b, c)
-  if type == "key_down" then
-    print(a)
-  elseif type == "key_up" then
-    print(a)
-  end
+function twig.event(type, a, b, c, d)
+  print(type, a, b, c, d)
 end
 
 function twig.update(dt)

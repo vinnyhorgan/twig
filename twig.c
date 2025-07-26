@@ -391,6 +391,8 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
 
     int args = 0;
 
+    SDL_ConvertEventToRenderCoordinates(state->renderer, event);
+
     switch (event->type) {
       case SDL_EVENT_KEY_DOWN:
         lua_pushstring(state->L, "key_down");
@@ -401,6 +403,26 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
         lua_pushstring(state->L, "key_up");
         lua_pushinteger(state->L, event->key.key);
         args = 2;
+        break;
+      case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        lua_pushstring(state->L, "mouse_button_down");
+        lua_pushinteger(state->L, event->button.button);
+        lua_pushinteger(state->L, event->button.x);
+        lua_pushinteger(state->L, event->button.y);
+        args = 4;
+        break;
+      case SDL_EVENT_MOUSE_BUTTON_UP:
+        lua_pushstring(state->L, "mouse_button_up");
+        lua_pushinteger(state->L, event->button.button);
+        lua_pushinteger(state->L, event->button.x);
+        lua_pushinteger(state->L, event->button.y);
+        args = 4;
+        break;
+      case SDL_EVENT_MOUSE_MOTION:
+        lua_pushstring(state->L, "mouse_motion");
+        lua_pushinteger(state->L, event->motion.x);
+        lua_pushinteger(state->L, event->motion.y);
+        args = 3;
         break;
       default:
         return SDL_APP_CONTINUE;
