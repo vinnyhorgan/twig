@@ -345,6 +345,13 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
   luaL_openlibs(state->L);
   luaL_requiref(state->L, "twig", luaopen_twig, 1);
 
+  lua_getglobal(state->L, "package");
+  lua_getfield(state->L, -1, "path");
+  const char* p = lua_tostring(state->L, -1);
+  lua_pushfstring(state->L, "%s;%sdata/?.lua;", p, SDL_GetBasePath());
+  lua_setfield(state->L, -3, "path");
+  lua_pop(state->L, 1);
+
   char path[256];
   SDL_snprintf(path, sizeof(path), "%sdata/main.lua", SDL_GetBasePath());
 
