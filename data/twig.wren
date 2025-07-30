@@ -29,6 +29,10 @@ class Main {
   mouse_button(button, pressed) {
     System.print("mouse button " + button.toString + (pressed ? " pressed" : " released"))
   }
+
+  key(key, pressed) {
+    System.print("key " + key + (pressed ? " pressed" : " released"))
+  }
 }
 
 var Twig = Main.new()

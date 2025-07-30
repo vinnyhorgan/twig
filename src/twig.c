@@ -583,6 +583,9 @@ typedef struct {
   WrenHandle* twig_handle;
   WrenHandle* mouse_move_handler;
   WrenHandle* mouse_button_handler;
+  WrenHandle* key_handler;
+
+  const char* keys[512];
 } State;
 
 // WREN API
@@ -1008,6 +1011,43 @@ LRESULT CALLBACK wndproc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) 
 
       break;
 
+    case WM_KEYDOWN:
+    case WM_SYSKEYDOWN:
+    case WM_KEYUP:
+    case WM_SYSKEYUP:
+      const char* key = nullptr;
+
+      if (wparam == VK_CONTROL) {
+        MSG next;
+        DWORD time;
+
+        if (lparam & 0x01000000)
+          key = "right_control";
+
+        time = GetMessageTime();
+        if (PeekMessageW(&next, 0x0, 0, 0, PM_NOREMOVE))
+          if (next.message == WM_KEYDOWN || next.message == WM_SYSKEYDOWN || next.message == WM_KEYUP ||
+              next.message == WM_SYSKEYUP)
+            if (next.wParam == VK_MENU && (next.lParam & 0x01000000) && next.time == time)
+              key = "?";
+
+        key = "left_control";
+      }
+
+      if (wparam == VK_PROCESSKEY)
+        key = "?";
+
+      key = state->keys[HIWORD(lparam) & 0x1FF];
+      bool key_pressed = !((lparam >> 31) & 1);
+
+      wrenEnsureSlots(state->vm, 3);
+      wrenSetSlotHandle(state->vm, 0, state->twig_handle);
+      wrenSetSlotString(state->vm, 1, key ? key : "?");
+      wrenSetSlotBool(state->vm, 2, key_pressed);
+      wrenCall(state->vm, state->key_handler);
+
+      break;
+
     default:
       res = DefWindowProc(hwnd, message, wparam, lparam);
   }
@@ -1030,6 +1070,128 @@ int WINAPI WinMain(HINSTANCE h_instance, HINSTANCE h_prev_instance, LPSTR p_cmd_
 #endif
 
   State state = {0};
+
+  state.keys[0x00B] = "0";
+  state.keys[0x002] = "1";
+  state.keys[0x003] = "2";
+  state.keys[0x004] = "3";
+  state.keys[0x005] = "4";
+  state.keys[0x006] = "5";
+  state.keys[0x007] = "6";
+  state.keys[0x008] = "7";
+  state.keys[0x009] = "8";
+  state.keys[0x00A] = "9";
+  state.keys[0x01E] = "a";
+  state.keys[0x030] = "b";
+  state.keys[0x02E] = "c";
+  state.keys[0x020] = "d";
+  state.keys[0x012] = "e";
+  state.keys[0x021] = "f";
+  state.keys[0x022] = "g";
+  state.keys[0x023] = "h";
+  state.keys[0x017] = "i";
+  state.keys[0x024] = "j";
+  state.keys[0x025] = "k";
+  state.keys[0x026] = "l";
+  state.keys[0x032] = "m";
+  state.keys[0x031] = "n";
+  state.keys[0x018] = "o";
+  state.keys[0x019] = "p";
+  state.keys[0x010] = "q";
+  state.keys[0x013] = "r";
+  state.keys[0x01F] = "s";
+  state.keys[0x014] = "t";
+  state.keys[0x016] = "u";
+  state.keys[0x02F] = "v";
+  state.keys[0x011] = "w";
+  state.keys[0x02D] = "x";
+  state.keys[0x015] = "y";
+  state.keys[0x02C] = "z";
+
+  state.keys[0x028] = "apostrophe";
+  state.keys[0x02B] = "backslash";
+  state.keys[0x033] = "comma";
+  state.keys[0x00D] = "equal";
+  state.keys[0x029] = "grave_accent";
+  state.keys[0x01A] = "left_bracket";
+  state.keys[0x00C] = "minus";
+  state.keys[0x034] = "period";
+  state.keys[0x01B] = "right_bracket";
+  state.keys[0x027] = "semicolon";
+  state.keys[0x035] = "slash";
+  state.keys[0x056] = "world_2";
+
+  state.keys[0x00E] = "backspace";
+  state.keys[0x153] = "delete";
+  state.keys[0x14F] = "end";
+  state.keys[0x01C] = "enter";
+  state.keys[0x001] = "escape";
+  state.keys[0x147] = "home";
+  state.keys[0x152] = "insert";
+  state.keys[0x15D] = "menu";
+  state.keys[0x151] = "page_down";
+  state.keys[0x149] = "page_up";
+  state.keys[0x045] = "pause";
+  state.keys[0x146] = "pause";
+  state.keys[0x039] = "space";
+  state.keys[0x00F] = "tab";
+  state.keys[0x03A] = "caps_lock";
+  state.keys[0x145] = "num_lock";
+  state.keys[0x046] = "scroll_lock";
+  state.keys[0x03B] = "f1";
+  state.keys[0x03C] = "f2";
+  state.keys[0x03D] = "f3";
+  state.keys[0x03E] = "f4";
+  state.keys[0x03F] = "f5";
+  state.keys[0x040] = "f6";
+  state.keys[0x041] = "f7";
+  state.keys[0x042] = "f8";
+  state.keys[0x043] = "f9";
+  state.keys[0x044] = "f10";
+  state.keys[0x057] = "f11";
+  state.keys[0x058] = "f12";
+  state.keys[0x064] = "f13";
+  state.keys[0x065] = "f14";
+  state.keys[0x066] = "f15";
+  state.keys[0x067] = "f16";
+  state.keys[0x068] = "f17";
+  state.keys[0x069] = "f18";
+  state.keys[0x06A] = "f19";
+  state.keys[0x06B] = "f20";
+  state.keys[0x06C] = "f21";
+  state.keys[0x06D] = "f22";
+  state.keys[0x06E] = "f23";
+  state.keys[0x076] = "f24";
+  state.keys[0x038] = "left_alt";
+  state.keys[0x01D] = "left_control";
+  state.keys[0x02A] = "left_shift";
+  state.keys[0x15B] = "left_super";
+  state.keys[0x137] = "print_screen";
+  state.keys[0x138] = "right_alt";
+  state.keys[0x11D] = "right_control";
+  state.keys[0x036] = "right_shift";
+  state.keys[0x15C] = "right_super";
+  state.keys[0x150] = "down";
+  state.keys[0x14B] = "left";
+  state.keys[0x14D] = "right";
+  state.keys[0x148] = "up";
+
+  state.keys[0x052] = "kp_0";
+  state.keys[0x04F] = "kp_1";
+  state.keys[0x050] = "kp_2";
+  state.keys[0x051] = "kp_3";
+  state.keys[0x04B] = "kp_4";
+  state.keys[0x04C] = "kp_5";
+  state.keys[0x04D] = "kp_6";
+  state.keys[0x047] = "kp_7";
+  state.keys[0x048] = "kp_8";
+  state.keys[0x049] = "kp_9";
+  state.keys[0x04E] = "kp_add";
+  state.keys[0x053] = "kp_decimal";
+  state.keys[0x135] = "kp_divide";
+  state.keys[0x11C] = "kp_enter";
+  state.keys[0x037] = "kp_multiply";
+  state.keys[0x04A] = "kp_subtract";
 
   // SETUP WREN
   WrenConfiguration conf;
@@ -1144,6 +1306,7 @@ int WINAPI WinMain(HINSTANCE h_instance, HINSTANCE h_prev_instance, LPSTR p_cmd_
 
   state.mouse_move_handler = wrenMakeCallHandle(state.vm, "mouse_move(_,_)");
   state.mouse_button_handler = wrenMakeCallHandle(state.vm, "mouse_button(_,_)");
+  state.key_handler = wrenMakeCallHandle(state.vm, "key(_,_)");
 
   wrenEnsureSlots(state.vm, 1);
   wrenGetVariable(state.vm, "twig", "Twig", 0);
@@ -1211,6 +1374,7 @@ cleanup:
   wrenReleaseHandle(state.vm, state.twig_handle);
   wrenReleaseHandle(state.vm, state.mouse_move_handler);
   wrenReleaseHandle(state.vm, state.mouse_button_handler);
+  wrenReleaseHandle(state.vm, state.key_handler);
   wrenFreeVM(state.vm);
 
   bmp_destroy(state.bmp);
