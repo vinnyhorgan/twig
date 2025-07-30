@@ -829,6 +829,16 @@ void wren_graphics_print(WrenVM* vm) {
   font_print(state->bmp, state->font, x, y, new_color(r, g, b, a), text);
 }
 
+void wren_graphics_width(WrenVM* vm) {
+  State* state = (State*)wrenGetUserData(vm);
+  wrenSetSlotDouble(vm, 0, state->bmp->w);
+}
+
+void wren_graphics_height(WrenVM* vm) {
+  State* state = (State*)wrenGetUserData(vm);
+  wrenSetSlotDouble(vm, 0, state->bmp->h);
+}
+
 WrenForeignMethodFn wren_bind_method(WrenVM* vm,
                                      const char* module,
                                      const char* class_name,
@@ -851,7 +861,7 @@ WrenForeignMethodFn wren_bind_method(WrenVM* vm,
   } else if (strcmp(class_name, "Graphics") == 0) {
     if (strcmp(signature, "clip(_,_,_,_)") == 0) {
       return wren_graphics_clip;
-    } else if (strcmp(signature, "blit_mode(_)") == 0) {
+    } else if (strcmp(signature, "blitMode(_)") == 0) {
       return wren_graphics_blit_mode;
     } else if (strcmp(signature, "clear(_,_,_,_)") == 0) {
       return wren_graphics_clear;
@@ -861,16 +871,20 @@ WrenForeignMethodFn wren_bind_method(WrenVM* vm,
       return wren_graphics_line;
     } else if (strcmp(signature, "rect(_,_,_,_,_,_,_,_)") == 0) {
       return wren_graphics_rect;
-    } else if (strcmp(signature, "rect_line(_,_,_,_,_,_,_,_)") == 0) {
+    } else if (strcmp(signature, "rectLine(_,_,_,_,_,_,_,_)") == 0) {
       return wren_graphics_rect_line;
     } else if (strcmp(signature, "blit(_,_,_,_,_,_,_)") == 0) {
       return wren_graphics_blit;
-    } else if (strcmp(signature, "blit_alpha(_,_,_,_,_,_,_,_)") == 0) {
+    } else if (strcmp(signature, "blitAlpha(_,_,_,_,_,_,_,_)") == 0) {
       return wren_graphics_blit_alpha;
-    } else if (strcmp(signature, "blit_tint(_,_,_,_,_,_,_,_,_,_,_)") == 0) {
+    } else if (strcmp(signature, "blitTint(_,_,_,_,_,_,_,_,_,_,_)") == 0) {
       return wren_graphics_blit_tint;
     } else if (strcmp(signature, "print(_,_,_,_,_,_,_)") == 0) {
       return wren_graphics_print;
+    } else if (strcmp(signature, "width") == 0) {
+      return wren_graphics_width;
+    } else if (strcmp(signature, "height") == 0) {
+      return wren_graphics_height;
     }
   }
 
@@ -982,16 +996,22 @@ LRESULT CALLBACK wndproc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) 
       switch (message) {
         case WM_LBUTTONDOWN:
           pressed = true;
+          button = 1;
+          break;
         case WM_LBUTTONUP:
           button = 1;
           break;
         case WM_RBUTTONDOWN:
           pressed = true;
+          button = 2;
+          break;
         case WM_RBUTTONUP:
           button = 2;
           break;
         case WM_MBUTTONDOWN:
           pressed = true;
+          button = 3;
+          break;
         case WM_MBUTTONUP:
           button = 3;
           break;

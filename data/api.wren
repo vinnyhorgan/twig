@@ -7,8 +7,11 @@ foreign class Bitmap {
 }
 
 class Graphics {
+  foreign static width
+  foreign static height
+
   foreign static clip(cx, cy, cw, ch)
-  foreign static blit_mode(mode)
+  foreign static blitMode(mode)
 
   foreign static clear(r, g, b, a)
 
@@ -34,10 +37,10 @@ class Graphics {
     rect(x, y, w, h, r, g, b, 255)
   }
 
-  foreign static rect_line(x, y, w, h, r, g, b, a)
+  foreign static rectLine(x, y, w, h, r, g, b, a)
 
-  static rect_line(x, y, w, h, r, g, b) {
-    rect_line(x, y, w, h, r, g, b, 255)
+  static rectLine(x, y, w, h, r, g, b) {
+    rectLine(x, y, w, h, r, g, b, 255)
   }
 
   foreign static blit(bmp, x, y, sx, sy, sw, sh)
@@ -46,20 +49,20 @@ class Graphics {
     blit(bmp, x, y, 0, 0, bmp.width, bmp.height)
   }
 
-  foreign static blit_alpha(bmp, x, y, sx, sy, sw, sh, alpha)
+  foreign static blitAlpha(bmp, x, y, sx, sy, sw, sh, alpha)
 
-  static blit_alpha(bmp, x, y) {
-    blit_alpha(bmp, x, y, 0, 0, bmp.width, bmp.height, 1.0)
+  static blitAlpha(bmp, x, y) {
+    blitAlpha(bmp, x, y, 0, 0, bmp.width, bmp.height, 1.0)
   }
 
-  static blit_alpha(bmp, x, y, sx, sy, sw, sh) {
-    blit_alpha(bmp, x, y, sx, sy, sw, sh, 1.0)
+  static blitAlpha(bmp, x, y, sx, sy, sw, sh) {
+    blitAlpha(bmp, x, y, sx, sy, sw, sh, 1.0)
   }
 
-  foreign static blit_tint(bmp, x, y, sx, sy, sw, sh, r, g, b, a)
+  foreign static blitTint(bmp, x, y, sx, sy, sw, sh, r, g, b, a)
 
-  static blit_tint(bmp, x, y, r, g, b) {
-    blit_alpha(bmp, x, y, 0, 0, bmp.width, bmp.height, r, g, b, 255)
+  static blitTint(bmp, x, y, r, g, b) {
+    blitTint(bmp, x, y, 0, 0, bmp.width, bmp.height, r, g, b, 255)
   }
 
   foreign static print(text, x, y, r, g, b, a)
