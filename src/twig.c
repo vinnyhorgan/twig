@@ -526,7 +526,22 @@ Glyph* get(Font* font, int code) {
     return &font->glyphs[lo - 1];
 }
 
-int text_height(Font* font, const char* text) {
+int font_text_width(Font* font, const char* text) {
+  int x = 0, w = 0, c;
+
+  while (*text) {
+    text = decode_utf8(text, &c);
+    if (c == '\n' || c == '\r') {
+      x = 0;
+    } else {
+      x += get(font, c)->w;
+      w = (x > w) ? x : w;
+    }
+  }
+  return w;
+}
+
+int font_text_height(Font* font, const char* text) {
   int rowh, h, c;
 
   h = rowh = get(font, 0)->h;
@@ -550,7 +565,7 @@ void font_print(Bitmap* dest, Font* font, int x, int y, Color color, const char*
       continue;
     if (c == '\n') {
       x = start;
-      y += text_height(font, "");
+      y += font_text_height(font, "");
       continue;
     }
     g = get(font, c);
@@ -623,8 +638,16 @@ WrenLoadModuleResult wren_load_module(WrenVM* vm, const char* name) {
   (void)vm;
 
   WrenLoadModuleResult result = {0};
+
+  if (strcmp(name, "random") == 0 || strcmp(name, "meta") == 0) {
+    return result;
+  }
+
+  char full_name[256];
+  snprintf(full_name, sizeof(full_name), "%s.wren", name);
+
   result.onComplete = load_module_complete;
-  result.source = read_data(name, nullptr);
+  result.source = read_data(full_name, nullptr);
   return result;
 }
 
@@ -829,6 +852,24 @@ void wren_graphics_print(WrenVM* vm) {
   font_print(state->bmp, state->font, x, y, new_color(r, g, b, a), text);
 }
 
+void wren_graphics_text_width(WrenVM* vm) {
+  State* state = (State*)wrenGetUserData(vm);
+
+  const char* text = wrenGetSlotString(vm, 1);
+  int width = font_text_width(state->font, text);
+
+  wrenSetSlotDouble(vm, 0, width);
+}
+
+void wren_graphics_text_height(WrenVM* vm) {
+  State* state = (State*)wrenGetUserData(vm);
+
+  const char* text = wrenGetSlotString(vm, 1);
+  int height = font_text_height(state->font, text);
+
+  wrenSetSlotDouble(vm, 0, height);
+}
+
 void wren_graphics_width(WrenVM* vm) {
   State* state = (State*)wrenGetUserData(vm);
   wrenSetSlotDouble(vm, 0, state->bmp->w);
@@ -881,6 +922,10 @@ WrenForeignMethodFn wren_bind_method(WrenVM* vm,
       return wren_graphics_blit_tint;
     } else if (strcmp(signature, "print(_,_,_,_,_,_,_)") == 0) {
       return wren_graphics_print;
+    } else if (strcmp(signature, "textWidth(_)") == 0) {
+      return wren_graphics_text_width;
+    } else if (strcmp(signature, "textHeight(_)") == 0) {
+      return wren_graphics_text_height;
     } else if (strcmp(signature, "width") == 0) {
       return wren_graphics_width;
     } else if (strcmp(signature, "height") == 0) {

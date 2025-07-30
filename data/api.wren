@@ -70,4 +70,7 @@ class Graphics {
   static print(text, x, y, r, g, b) {
     print(text, x, y, r, g, b, 255)
   }
+
+  foreign static textWidth(text)
+  foreign static textHeight(text)
 }
