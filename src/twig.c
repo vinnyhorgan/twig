@@ -578,6 +578,11 @@ typedef struct {
   Bitmap* bmp;
   Bitmap* font_bmp;
   Font* font;
+
+  WrenVM* vm;
+  WrenHandle* twig_handle;
+  WrenHandle* mouse_move_handler;
+  WrenHandle* mouse_button_handler;
 } State;
 
 // WREN API
@@ -935,6 +940,74 @@ LRESULT CALLBACK wndproc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) 
     case WM_DESTROY:
       state->close = true;
       break;
+
+    case WM_MOUSEMOVE:
+      int mx = (int)LOWORD(lparam);
+      int my = (int)HIWORD(lparam);
+
+      int rel_x = mx - state->dx;
+      int rel_y = my - state->dy;
+
+      if (rel_x >= 0 && rel_y >= 0 && rel_x < state->dw && rel_y < state->dh) {
+        int bmp_x = rel_x * state->bmp->w / state->dw;
+        int bmp_y = rel_y * state->bmp->h / state->dh;
+
+        wrenEnsureSlots(state->vm, 3);
+        wrenSetSlotHandle(state->vm, 0, state->twig_handle);
+        wrenSetSlotDouble(state->vm, 1, bmp_x);
+        wrenSetSlotDouble(state->vm, 2, bmp_y);
+        wrenCall(state->vm, state->mouse_move_handler);
+      }
+
+      break;
+
+    case WM_LBUTTONUP:
+    case WM_RBUTTONUP:
+    case WM_MBUTTONUP:
+    case WM_XBUTTONUP:
+    case WM_LBUTTONDOWN:
+    case WM_LBUTTONDBLCLK:
+    case WM_RBUTTONDOWN:
+    case WM_RBUTTONDBLCLK:
+    case WM_MBUTTONDOWN:
+    case WM_MBUTTONDBLCLK:
+    case WM_XBUTTONDOWN:
+    case WM_XBUTTONDBLCLK:
+      int button = 0;
+      bool pressed = false;
+
+      switch (message) {
+        case WM_LBUTTONDOWN:
+          pressed = true;
+        case WM_LBUTTONUP:
+          button = 1;
+          break;
+        case WM_RBUTTONDOWN:
+          pressed = true;
+        case WM_RBUTTONUP:
+          button = 2;
+          break;
+        case WM_MBUTTONDOWN:
+          pressed = true;
+        case WM_MBUTTONUP:
+          button = 3;
+          break;
+
+        default:
+          button = (GET_XBUTTON_WPARAM(wparam) == XBUTTON1 ? 5 : 6);
+          if (message == WM_XBUTTONDOWN) {
+            pressed = true;
+          }
+      }
+
+      wrenEnsureSlots(state->vm, 3);
+      wrenSetSlotHandle(state->vm, 0, state->twig_handle);
+      wrenSetSlotDouble(state->vm, 1, button);
+      wrenSetSlotBool(state->vm, 2, pressed);
+      wrenCall(state->vm, state->mouse_button_handler);
+
+      break;
+
     default:
       res = DefWindowProc(hwnd, message, wparam, lparam);
   }
@@ -956,6 +1029,8 @@ int WINAPI WinMain(HINSTANCE h_instance, HINSTANCE h_prev_instance, LPSTR p_cmd_
   SetConsoleTitle("twig debug console");
 #endif
 
+  State state = {0};
+
   // SETUP WREN
   WrenConfiguration conf;
   wrenInitConfiguration(&conf);
@@ -965,28 +1040,26 @@ int WINAPI WinMain(HINSTANCE h_instance, HINSTANCE h_prev_instance, LPSTR p_cmd_
   conf.bindForeignMethodFn = wren_bind_method;
   conf.bindForeignClassFn = wren_bind_class;
 
-  WrenVM* vm = wrenNewVM(&conf);
+  state.vm = wrenNewVM(&conf);
 
   char* twig_script = read_data("twig.wren", nullptr);
   if (!twig_script) {
     printf("failed to read twig.wren\n");
-    wrenFreeVM(vm);
+    wrenFreeVM(state.vm);
     return 1;
   }
 
-  WrenInterpretResult res = wrenInterpret(vm, "twig", twig_script);
+  WrenInterpretResult res = wrenInterpret(state.vm, "twig", twig_script);
   free(twig_script);
 
   if (res != WREN_RESULT_SUCCESS) {
     printf("failed to interpret twig.wren\n");
-    wrenFreeVM(vm);
+    wrenFreeVM(state.vm);
     return 1;
   }
 
   // INIT WINDOW
   SetProcessDPIAware();
-
-  State state = {0};
 
   state.bmp = bmp_create(RES_W, RES_H);
   bmp_clear(state.bmp, (Color){30, 30, 30, 255});
@@ -1035,7 +1108,7 @@ int WINAPI WinMain(HINSTANCE h_instance, HINSTANCE h_prev_instance, LPSTR p_cmd_
   if (!state.hwnd) {
     printf("failed to create window\n");
     bmp_destroy(state.bmp);
-    wrenFreeVM(vm);
+    wrenFreeVM(state.vm);
     return 1;
   }
 
@@ -1064,17 +1137,20 @@ int WINAPI WinMain(HINSTANCE h_instance, HINSTANCE h_prev_instance, LPSTR p_cmd_
   BitBlt(state.hdc, 0, 0, state.win_w, state.win_h, 0, 0, 0, BLACKNESS);
 
   // CALL INIT
-  wrenSetUserData(vm, &state);
+  wrenSetUserData(state.vm, &state);
 
-  WrenHandle* init_handle = wrenMakeCallHandle(vm, "init()");
-  WrenHandle* update_handle = wrenMakeCallHandle(vm, "update()");
+  WrenHandle* init_handle = wrenMakeCallHandle(state.vm, "init()");
+  WrenHandle* update_handle = wrenMakeCallHandle(state.vm, "update()");
 
-  wrenEnsureSlots(vm, 1);
-  wrenGetVariable(vm, "twig", "Twig", 0);
-  WrenHandle* twig_handle = wrenGetSlotHandle(vm, 0);
+  state.mouse_move_handler = wrenMakeCallHandle(state.vm, "mouse_move(_,_)");
+  state.mouse_button_handler = wrenMakeCallHandle(state.vm, "mouse_button(_,_)");
 
-  wrenSetSlotHandle(vm, 0, twig_handle);
-  res = wrenCall(vm, init_handle);
+  wrenEnsureSlots(state.vm, 1);
+  wrenGetVariable(state.vm, "twig", "Twig", 0);
+  state.twig_handle = wrenGetSlotHandle(state.vm, 0);
+
+  wrenSetSlotHandle(state.vm, 0, state.twig_handle);
+  res = wrenCall(state.vm, init_handle);
   if (res != WREN_RESULT_SUCCESS) {
     printf("failed to call init()\n");
     goto cleanup;
@@ -1083,8 +1159,8 @@ int WINAPI WinMain(HINSTANCE h_instance, HINSTANCE h_prev_instance, LPSTR p_cmd_
   // MAIN LOOP
   while (true) {
     // CALL UPDATE
-    wrenSetSlotHandle(vm, 0, twig_handle);
-    res = wrenCall(vm, update_handle);
+    wrenSetSlotHandle(state.vm, 0, state.twig_handle);
+    res = wrenCall(state.vm, update_handle);
     if (res != WREN_RESULT_SUCCESS) {
       printf("failed to call update()\n");
       goto cleanup;
@@ -1130,10 +1206,12 @@ int WINAPI WinMain(HINSTANCE h_instance, HINSTANCE h_prev_instance, LPSTR p_cmd_
   }
 
 cleanup:
-  wrenReleaseHandle(vm, init_handle);
-  wrenReleaseHandle(vm, update_handle);
-  wrenReleaseHandle(vm, twig_handle);
-  wrenFreeVM(vm);
+  wrenReleaseHandle(state.vm, init_handle);
+  wrenReleaseHandle(state.vm, update_handle);
+  wrenReleaseHandle(state.vm, state.twig_handle);
+  wrenReleaseHandle(state.vm, state.mouse_move_handler);
+  wrenReleaseHandle(state.vm, state.mouse_button_handler);
+  wrenFreeVM(state.vm);
 
   bmp_destroy(state.bmp);
   free(state.bmi);

@@ -21,6 +21,14 @@ class Main {
 
     Graphics.print("Hellooooo", 100, 30, 255, 255, 255, 255)
   }
+
+  mouse_move(x, y) {
+
+  }
+
+  mouse_button(button, pressed) {
+    System.print("mouse button " + button.toString + (pressed ? " pressed" : " released"))
+  }
 }
 
 var Twig = Main.new()
