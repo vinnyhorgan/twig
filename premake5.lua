@@ -52,5 +52,5 @@ project "twig"
   links { "miniz", "wren", "stb_image", "winmm" }
 
   prebuildcommands {
-    "\"C:\\Program Files\\7-Zip\\7z.exe\" a -tzip -mx=9 data.zip ../data/*"
+    "\"C:\\Program Files\\7-Zip\\7z.exe\" a -tzip -mx=9 data.zip ../data/* -bso0"
   }

@@ -172,6 +172,10 @@ class Main {
   init() {
     _drawing = false
 
+    _runRoom = 0
+    _runX = 10
+    _runY = 10
+
     Util.rand = Random.new()
 
     _mode = "rooms"
@@ -209,6 +213,10 @@ class Main {
     _backButton = Button.new(10, 10, 60, 30, "Back", Fn.new {
       _mode = "rooms"
     })
+
+    _runButton = Button.new(Graphics.width - 80, Graphics.height - 40, 30, 30, "Run", Fn.new {
+      _mode = "run"
+    })
   }
 
   update() {
@@ -217,6 +225,7 @@ class Main {
     if (_mode == "rooms") {
       _newButton.draw()
       _editButton.draw()
+      _runButton.draw()
 
       if (_currentRoom + 1 < _rooms.count) {
         _nextButton.draw()
@@ -243,6 +252,8 @@ class Main {
         _currentTile.draw(tileX * 16, tileY * 16, 0.3)
         _backButton.draw()
       }
+    } else if (_mode == "run") {
+      _rooms[_runRoom].draw()
     }
   }
 
@@ -255,6 +266,7 @@ class Main {
     if (_mode == "rooms") {
       _newButton.button(button, pressed)
       _editButton.button(button, pressed)
+      _runButton.button(button, pressed)
 
       if (_currentRoom + 1 < _rooms.count) {
         _nextButton.button(button, pressed)
@@ -275,7 +287,11 @@ class Main {
   }
 
   key(key, pressed) {
-
+    if (_mode == "run") {
+      if (key == "escape") {
+        _mode = "rooms"
+      }
+    }
   }
 }
 
