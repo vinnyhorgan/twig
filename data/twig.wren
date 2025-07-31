@@ -2,6 +2,9 @@ import "api" for Bitmap, Graphics
 import "random" for Random
 
 class Util {
+  static rand=(v) { __rand = v }
+  static rand { __rand }
+
   static hslToRgb(h, s, l) {
     h = h % 360
     s = s.clamp(0, 1)
@@ -72,19 +75,19 @@ class Button {
   }
 
   draw() {
-    var color = [20, 20, 20]
-
-    if (mouseInside()) {
-      color = [100, 100, 100]
-    }
-
-    Graphics.rectLine(_x, _y, _w, _h, color[0], color[1], color[2])
-
     var tw = Graphics.textWidth(_text)
     var th = Graphics.textHeight(_text)
     var tx = _x + (_w - tw) / 2
     var ty = _y + (_h - th) / 2
-    Graphics.print(_text, tx, ty, color[0], color[1], color[2])
+    var col = Twig.currentRoomBg
+
+    if (mouseInside()) {
+      Graphics.rect(_x, _y, _w, _h, 150, 150, 150)
+      Graphics.print(_text, tx, ty, col[0], col[1], col[2])
+    } else {
+      Graphics.rectLine(_x, _y, _w, _h, 150, 150, 150)
+      Graphics.print(_text, tx, ty, 150, 150, 150)
+    }
   }
 
   button(button, pressed) {
@@ -101,6 +104,14 @@ class Tile {
     _y = y
     _w = w
     _h = h
+  }
+
+  draw(x, y) {
+    Graphics.blitAlpha(_spritesheet, x, y, _x, _y, _w, _h)
+  }
+
+  draw(x, y, alpha) {
+    Graphics.blitAlpha(_spritesheet, x, y, _x, _y, _w, _h, alpha)
   }
 }
 
@@ -122,24 +133,47 @@ class Room {
       _tiles.add(row)
     }
 
-    var rand = Random.new()
-    var h = rand.int(0, 360)
-    var s = rand.float(0.2, 0.5)
-    var l = rand.float(0.6, 0.8)
+    var h = Util.rand.int(0, 360)
+    var s = Util.rand.float(0.1, 0.2)
+    var l = Util.rand.float(0.2, 0.3)
     _bg = Util.hslToRgb(h, s, l)
   }
 
   name { _name }
+  bg { _bg }
+
+  addTile(x, y, tile) {
+    _tiles[y][x] = tile
+  }
 
   draw() {
     Graphics.clear(_bg[0], _bg[1], _bg[2])
+
+    var TILE_SIZE = 16
+    var TILES_X = Graphics.width / TILE_SIZE
+    var TILES_Y = Graphics.height / TILE_SIZE
+
+    for (y in 0...TILES_Y) {
+      for (x in 0...TILES_X) {
+        var tile = _tiles[y][x]
+        if (tile != null) {
+          tile.draw(x * TILE_SIZE, y * TILE_SIZE)
+        }
+      }
+    }
   }
 }
 
 class Main {
   construct new() {}
 
+  currentRoomBg { _rooms[_currentRoom].bg }
+
   init() {
+    _drawing = false
+
+    Util.rand = Random.new()
+
     _mode = "rooms"
 
     Mouse.x = 0
@@ -149,6 +183,8 @@ class Main {
 
     _rooms = []
     _currentRoom = 0
+
+    _currentTile = Tile.new(_sheet, 16 * 4, 16 * 2, 16, 16)
 
     _rooms.add(Room.new("New Room"))
 
@@ -167,6 +203,7 @@ class Main {
 
     _editButton = Button.new(10, Graphics.height - 40, 60, 30, "Edit", Fn.new {
       _mode = "edit"
+      _drawing = false
     })
 
     _backButton = Button.new(10, 10, 60, 30, "Back", Fn.new {
@@ -189,15 +226,23 @@ class Main {
         _prevButton.draw()
       }
 
-      Graphics.rectLine(10, 10, 100, 20, 20, 20, 20)
+      Graphics.rectLine(10, 10, 100, 20, 150, 150, 150)
 
       var tw = Graphics.textWidth(_rooms[_currentRoom].name)
       var th = Graphics.textHeight(_rooms[_currentRoom].name)
       var tx = 10 + (100 - tw) / 2
       var ty = 10 + (20 - th) / 2
-      Graphics.print(_rooms[_currentRoom].name, tx, ty, 20, 20, 20)
+      Graphics.print(_rooms[_currentRoom].name, tx, ty, 150, 150, 150)
     } else if (_mode == "edit") {
-      _backButton.draw()
+      var tileX = (Mouse.x / 16).floor
+      var tileY = (Mouse.y / 16).floor
+
+      if (_drawing) {
+        _rooms[_currentRoom].addTile(tileX, tileY, _currentTile)
+      } else {
+        _currentTile.draw(tileX * 16, tileY * 16, 0.3)
+        _backButton.draw()
+      }
     }
   }
 
@@ -220,6 +265,12 @@ class Main {
       }
     } else if (_mode == "edit") {
       _backButton.button(button, pressed)
+
+      if (button == 1 && pressed) {
+        _drawing = true
+      } else if (button == 1 && !pressed) {
+        _drawing = false
+      }
     }
   }
 
